@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>منظم الجداول الذكي</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- 🔍 حقل البحث -->
+  <div class="search-bar">
+    <input type="text" id="searchInput" placeholder="ابحث في الجداول...">
+    <button id="clearSearch">×</button>
+  </div>
+
+  <!-- 📊 منطقة الجداول -->
+  <div id="gridWrapper">
+    <div id="tableGrid" class="table-grid">
+      <!-- صف أول من الجداول العامودية -->
+      <div class="table-row">
+        <div class="table-block">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th contenteditable="true"></th>
+                <th contenteditable="true"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td contenteditable="true"></td>
+                <td contenteditable="true"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ➕ زر التمدد الأفقي (إضافة صف جديد من الجداول العامودية) -->
+    <div class="add-horizontal">
+      <button onclick="addTableRow()">➕ صف جداول جديد</button>
+    </div>
+
+    <!-- ➕ زر التمدد العمودي (إضافة صف جديد داخل كل جدول موجود) -->
+    <div class="add-vertical">
+      <button onclick="addRowToAllTables()">➕ صف بيانات جديد</button>
+    </div>
+  </div>
+
+  <!-- 📤 زر التصدير -->
+  <div class="export-section">
+    <button id="exportExcel">📤 تصدير إلى Excel</button>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
