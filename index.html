@@ -42,14 +42,12 @@
     th {
       background: #eee;
     }
-    td[contenteditable="true"], th[contenteditable="true"] {
+    td[contenteditable="true"],
+    th[contenteditable="true"] {
       outline: none;
     }
     .match-exact {
       background-color: #ffcccc !important;
-    }
-    .match-close {
-      background-color: #fff3b0 !important;
     }
     .actions {
       display: flex;
@@ -139,39 +137,24 @@
 
     function checkSimilarity() {
       const cells = Array.from(document.querySelectorAll('#excelTable td'));
-      const values = cells.map(c => c.textContent.trim());
+      const valueMap = {};
 
       cells.forEach(cell => {
+        cell.classList.remove('match-exact');
         const val = cell.textContent.trim();
-        cell.classList.remove('match-exact', 'match-close');
-
-        values.forEach(other => {
-          if (val && other && val !== other) {
-            if (val === other) {
-              cell.classList.add('match-exact');
-            } else if (isTimeSimilar(val, other)) {
-              cell.classList.add('match-close');
-            }
-          }
-        });
+        if (/^\d+(\.\d+)?$/.test(val)) {
+          if (!valueMap[val]) valueMap[val] = [];
+          valueMap[val].push(cell);
+        }
       });
-    }
 
-    function isTimeSimilar(a, b) {
-      const parseTime = str => {
-        const parts = str.match(/(\d{1,2})([:٫،](\d{1,2}))?/);
-        if (!parts) return null;
-        const h = parseInt(parts[1]);
-        const m = parseInt(parts[3] || '0');
-        return h + m / 60;
-      };
-
-      const rangeA = a.split(/[-–إلى]/).map(parseTime);
-      const rangeB = b.split(/[-–إلى]/).map(parseTime);
-
-      if (rangeA.length !== 2 || rangeB.length !== 2 || rangeA.includes(null) || rangeB.includes(null)) return false;
-
-      return Math.abs(rangeA[0] - rangeB[0]) <= 1 || Math.abs(rangeA[1] - rangeB[1]) <= 1;
+      Object.values(valueMap).forEach(group => {
+        if (group.length > 1) {
+          group.forEach(cell => {
+            cell.classList.add('match-exact');
+          });
+        }
+      });
     }
 
     document.addEventListener('input', () => {
