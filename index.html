@@ -2,58 +2,247 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <title>منظم الجداول الذكي</title>
+  <title>TheraWork - جدول عملي</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 10px;
+      background: #f9f9f9;
+    }
+    .search-bar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    input[type="text"] {
+      flex: 1;
+      padding: 8px;
+      font-size: 16px;
+    }
+    button {
+      padding: 8px 12px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-bottom: 10px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      min-width: 100px;
+      text-align: center;
+      word-wrap: break-word;
+    }
+    th {
+      background: #eee;
+    }
+    td[contenteditable="true"], th[contenteditable="true"] {
+      outline: none;
+    }
+    .match-exact {
+      background-color: #ffcccc !important;
+    }
+    .match-close {
+      background-color: #fff3b0 !important;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 15px;
+    }
+  </style>
 </head>
 <body>
 
-  <!-- 🔍 حقل البحث -->
+  <!-- 🔍 البحث -->
   <div class="search-bar">
-    <input type="text" id="searchInput" placeholder="ابحث في الجداول...">
-    <button id="clearSearch">×</button>
+    <input type="text" id="searchInput" placeholder="ابحث في الجدول...">
+    <button onclick="clearSearch()">×</button>
   </div>
 
-  <!-- 📊 منطقة الجداول -->
-  <div id="gridWrapper">
-    <div id="tableGrid" class="table-grid">
-      <!-- صف أول من الجداول العامودية -->
-      <div class="table-row">
-        <div class="table-block">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th contenteditable="true"></th>
-                <th contenteditable="true"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td contenteditable="true"></td>
-                <td contenteditable="true"></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- ➕ زر التمدد الأفقي (إضافة صف جديد من الجداول العامودية) -->
-    <div class="add-horizontal">
-      <button onclick="addTableRow()">➕ صف جداول جديد</button>
-    </div>
-
-    <!-- ➕ زر التمدد العمودي (إضافة صف جديد داخل كل جدول موجود) -->
-    <div class="add-vertical">
-      <button onclick="addRowToAllTables()">➕ صف بيانات جديد</button>
-    </div>
+  <!-- 🧭 أزرار التحكم -->
+  <div class="actions">
+    <button onclick="addColumn()">➕ عمود</button>
+    <button onclick="addRow()">➕ صف</button>
+    <button onclick="saveTable()">💾 حفظ البيانات</button>
+    <button onclick="loadTable()">📂 استرجاع البيانات</button>
+    <button onclick="exportExcel()">📤 تصدير Excel</button>
   </div>
 
-  <!-- 📤 زر التصدير -->
-  <div class="export-section">
-    <button id="exportExcel">📤 تصدير إلى Excel</button>
-  </div>
+  <!-- 📊 الجدول -->
+  <table id="excelTable">
+    <thead>
+      <tr id="headerRow">
+        <th contenteditable="true"></th>
+        <th contenteditable="true"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td contenteditable="true"></td>
+        <td contenteditable="true"></td>
+      </tr>
+    </tbody>
+  </table>
 
-  <script src="script.js"></script>
+  <script>
+    function addColumn() {
+      const header = document.getElementById('headerRow');
+      const th = document.createElement('th');
+      th.contentEditable = true;
+      header.appendChild(th);
+
+      const rows = document.querySelectorAll('#excelTable tbody tr');
+      rows.forEach(row => {
+        const td = document.createElement('td');
+        td.contentEditable = true;
+        row.appendChild(td);
+      });
+    }
+
+    function addRow() {
+      const row = document.createElement('tr');
+      const colCount = document.getElementById('headerRow').children.length;
+      for (let i = 0; i < colCount; i++) {
+        const td = document.createElement('td');
+        td.contentEditable = true;
+        row.appendChild(td);
+      }
+      document.querySelector('#excelTable tbody').appendChild(row);
+    }
+
+    function clearSearch() {
+      document.getElementById('searchInput').value = '';
+      filterTable('');
+    }
+
+    document.getElementById('searchInput').addEventListener('input', e => {
+      filterTable(e.target.value.trim());
+    });
+
+    function filterTable(query) {
+      const rows = document.querySelectorAll('#excelTable tbody tr');
+      rows.forEach(row => {
+        const match = Array.from(row.children).some(cell =>
+          cell.textContent.includes(query)
+        );
+        row.style.display = query === '' || match ? '' : 'none';
+      });
+    }
+
+    function checkSimilarity() {
+      const cells = Array.from(document.querySelectorAll('#excelTable td'));
+      const values = cells.map(c => c.textContent.trim());
+
+      cells.forEach(cell => {
+        const val = cell.textContent.trim();
+        cell.classList.remove('match-exact', 'match-close');
+
+        values.forEach(other => {
+          if (val && other && val !== other) {
+            if (val === other) {
+              cell.classList.add('match-exact');
+            } else if (isTimeSimilar(val, other)) {
+              cell.classList.add('match-close');
+            }
+          }
+        });
+      });
+    }
+
+    function isTimeSimilar(a, b) {
+      const parseTime = str => {
+        const parts = str.match(/(\d{1,2})([:٫،](\d{1,2}))?/);
+        if (!parts) return null;
+        const h = parseInt(parts[1]);
+        const m = parseInt(parts[3] || '0');
+        return h + m / 60;
+      };
+
+      const rangeA = a.split(/[-–إلى]/).map(parseTime);
+      const rangeB = b.split(/[-–إلى]/).map(parseTime);
+
+      if (rangeA.length !== 2 || rangeB.length !== 2 || rangeA.includes(null) || rangeB.includes(null)) return false;
+
+      return Math.abs(rangeA[0] - rangeB[0]) <= 1 || Math.abs(rangeA[1] - rangeB[1]) <= 1;
+    }
+
+    document.addEventListener('input', () => {
+      checkSimilarity();
+    });
+
+    function exportExcel() {
+      const table = document.getElementById('excelTable');
+      const rows = Array.from(table.querySelectorAll('tr'));
+      const data = [];
+
+      rows.forEach(row => {
+        const cells = Array.from(row.querySelectorAll('th, td'));
+        const rowData = cells.map(cell => cell.textContent.trim());
+        if (rowData.length > 0) data.push(rowData);
+      });
+
+      const worksheet = XLSX.utils.aoa_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "TheraWork");
+      XLSX.writeFile(workbook, "TheraWork.xlsx");
+    }
+
+    function saveTable() {
+      const table = document.getElementById('excelTable');
+      const rows = Array.from(table.querySelectorAll('tr'));
+      const data = [];
+
+      rows.forEach(row => {
+        const cells = Array.from(row.querySelectorAll('th, td'));
+        const rowData = cells.map(cell => cell.textContent.trim());
+        data.push(rowData);
+      });
+
+      localStorage.setItem('theraTable', JSON.stringify(data));
+      alert('✅ تم حفظ البيانات على جهازك.');
+    }
+
+    function loadTable() {
+      const saved = localStorage.getItem('theraTable');
+      if (!saved) return alert('⚠️ لا توجد بيانات محفوظة.');
+
+      const data = JSON.parse(saved);
+      const table = document.getElementById('excelTable');
+      table.innerHTML = '';
+
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      data[0].forEach(cell => {
+        const th = document.createElement('th');
+        th.contentEditable = true;
+        th.textContent = cell;
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      data.slice(1).forEach(rowData => {
+        const row = document.createElement('tr');
+        rowData.forEach(cell => {
+          const td = document.createElement('td');
+          td.contentEditable = true;
+          td.textContent = cell;
+          row.appendChild(td);
+        });
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+      checkSimilarity();
+    }
+  </script>
 </body>
 </html>
