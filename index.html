@@ -130,6 +130,7 @@
     <button onclick="showSaveOptions()">💾 حفظ البيانات</button>
     <button onclick="showLoadOptions()">📂 استرجاع البيانات</button>
     <button onclick="exportExcel()">📤 تصدير Excel</button>
+    <button onclick="resetTable()">🗑️ إزالة الكل</button>
   </div>
 
   <table id="excelTable">
@@ -175,6 +176,7 @@
       rows.forEach(row => {
         const td = document.createElement('td');
         td.contentEditable = true;
+        td.addEventListener('blur', autoSaveRow);
         row.appendChild(td);
       });
     }
@@ -300,13 +302,10 @@
     function autoSaveRow() {
       const table = document.getElementById('excelTable');
       const rows = Array.from(table.querySelectorAll('tbody tr'));
-      const saved = localStorage.getItem('theraTable');
-      const oldData = saved ? JSON.parse(saved) : [];
       const newData = rows.map(row => {
         return Array.from(row.children).map(cell => cell.textContent.trim());
       });
-      const merged = [...oldData, ...newData];
-      localStorage.setItem('theraTable', JSON.stringify(merged));
+      localStorage.setItem('theraTable', JSON.stringify(newData));
     }
 
     function showSaveOptions() {
@@ -367,6 +366,14 @@
         table.querySelector('tbody').appendChild(row);
       });
       checkConflicts();
+    }
+
+    function resetTable() {
+      if (!confirm("هل أنت متأكد أنك تريد إزالة كل المعلومات؟")) return;
+      localStorage.removeItem('theraTable');
+      const tbody = document.querySelector('#excelTable tbody');
+      tbody.innerHTML = '';
+      addRow();
     }
 
     document.addEventListener('input', () => {
