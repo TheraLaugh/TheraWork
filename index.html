@@ -14,18 +14,42 @@
     }
     .search-bar {
       display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+    #searchInput {
+      flex: 1;
+      padding: 6px;
+      font-size: 14px;
+      max-width: 250px;
+    }
+    .filters {
+      display: flex;
       gap: 10px;
       margin-bottom: 10px;
     }
-    input[type="text"] {
-      flex: 1;
-      padding: 8px;
-      font-size: 16px;
-    }
-    button {
-      padding: 8px 12px;
-      font-size: 16px;
+    .filters button {
+      padding: 6px 10px;
+      font-size: 14px;
       cursor: pointer;
+    }
+    .legend {
+      display: none;
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    .legend p {
+      margin: 5px 0;
+      font-size: 14px;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 15px;
     }
     table {
       border-collapse: collapse;
@@ -49,48 +73,98 @@
     .match-exact {
       background-color: #ffcccc !important;
     }
-    .actions {
+    .confirmed {
+      background-color: #d4edda !important;
+    }
+    .cancelled {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+    .conflict-host {
+      background-color: #ffcccc !important;
+    }
+    .conflict-time {
+      background-color: #fff3cd !important;
+    }
+    .conflict-place {
+      background-color: #e0ccff !important;
+    }
+    .conflict-role {
+      background-color: #cce5ff !important;
+    }
+    .status-buttons {
       display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-bottom: 15px;
+      gap: 5px;
+      justify-content: center;
+      margin-top: 5px;
     }
   </style>
 </head>
 <body>
 
-  <!-- 🔍 البحث -->
   <div class="search-bar">
-    <input type="text" id="searchInput" placeholder="ابحث في الجدول...">
+    <button onclick="toggleLegend()">≡</button>
+    <input type="text" id="searchInput" placeholder="ابحث...">
     <button onclick="clearSearch()">×</button>
   </div>
 
-  <!-- 🧭 أزرار التحكم -->
+  <div class="legend" id="legendBox">
+    <p style="background:#ffcccc">أحمر: تضارب المستضيف أو المستضاف بنفس الساعة</p>
+    <p style="background:#fff3cd">أصفر: تضارب بفارق أقل من ساعة</p>
+    <p style="background:#e0ccff">بنفسجي: تضارب المكان بنفس الساعة</p>
+    <p style="background:#cce5ff">أزرق: المستضيف هو المستضاف في صف آخر بنفس الساعة</p>
+    <p style="background:#d4edda">أخضر: الموعد تم ترتيبه</p>
+    <p style="opacity:0.5">شفاف: الموعد تم إلغاؤه</p>
+  </div>
+
+  <div class="filters">
+    <button onclick="filterRows('all')">عرض الكل</button>
+    <button onclick="filterRows('pending')">قيد الفحص</button>
+    <button onclick="filterRows('confirmed')">تم الترتيب</button>
+    <button onclick="filterRows('cancelled')">تم الإلغاء</button>
+  </div>
+
   <div class="actions">
     <button onclick="addColumn()">➕ عمود</button>
     <button onclick="addRow()">➕ صف</button>
-    <button onclick="saveTable()">💾 حفظ البيانات</button>
-    <button onclick="loadTable()">📂 استرجاع البيانات</button>
+    <button onclick="showSaveOptions()">💾 حفظ البيانات</button>
+    <button onclick="showLoadOptions()">📂 استرجاع البيانات</button>
     <button onclick="exportExcel()">📤 تصدير Excel</button>
   </div>
 
-  <!-- 📊 الجدول -->
   <table id="excelTable">
     <thead>
       <tr id="headerRow">
-        <th contenteditable="true"></th>
-        <th contenteditable="true"></th>
+        <th contenteditable="true">المستضيف</th>
+        <th contenteditable="true">المكان</th>
+        <th contenteditable="true">المستضاف</th>
+        <th contenteditable="true">الساعة</th>
+        <th contenteditable="true">التاريخ</th>
+        <th>الحالة</th>
       </tr>
     </thead>
     <tbody>
       <tr>
         <td contenteditable="true"></td>
         <td contenteditable="true"></td>
+        <td contenteditable="true"></td>
+        <td contenteditable="true"></td>
+        <td contenteditable="true"></td>
+        <td>
+          <div class="status-buttons">
+            <button onclick="markConfirmed(this)">✅</button>
+            <button onclick="markCancelled(this)">❌</button>
+          </div>
+        </td>
       </tr>
     </tbody>
   </table>
-
   <script>
+    function toggleLegend() {
+      const legend = document.getElementById('legendBox');
+      legend.style.display = legend.style.display === 'none' ? 'block' : 'none';
+    }
+
     function addColumn() {
       const header = document.getElementById('headerRow');
       const th = document.createElement('th');
@@ -108,12 +182,46 @@
     function addRow() {
       const row = document.createElement('tr');
       const colCount = document.getElementById('headerRow').children.length;
-      for (let i = 0; i < colCount; i++) {
+      for (let i = 0; i < colCount - 1; i++) {
         const td = document.createElement('td');
         td.contentEditable = true;
+        td.addEventListener('blur', autoSaveRow);
         row.appendChild(td);
       }
+      const statusTd = document.createElement('td');
+      const div = document.createElement('div');
+      div.className = 'status-buttons';
+      div.innerHTML = `
+        <button onclick="markConfirmed(this)">✅</button>
+        <button onclick="markCancelled(this)">❌</button>
+      `;
+      statusTd.appendChild(div);
+      row.appendChild(statusTd);
       document.querySelector('#excelTable tbody').appendChild(row);
+    }
+
+    function markConfirmed(btn) {
+      const row = btn.closest('tr');
+      row.classList.remove('cancelled');
+      row.classList.add('confirmed');
+      autoSaveRow();
+    }
+
+    function markCancelled(btn) {
+      const row = btn.closest('tr');
+      row.classList.remove('confirmed');
+      row.classList.add('cancelled');
+      autoSaveRow();
+    }
+
+    function filterRows(type) {
+      const rows = document.querySelectorAll('#excelTable tbody tr');
+      rows.forEach(row => {
+        row.style.display = '';
+        if (type === 'confirmed' && !row.classList.contains('confirmed')) row.style.display = 'none';
+        if (type === 'cancelled' && !row.classList.contains('cancelled')) row.style.display = 'none';
+        if (type === 'pending' && (row.classList.contains('confirmed') || row.classList.contains('cancelled'))) row.style.display = 'none';
+      });
     }
 
     function clearSearch() {
@@ -135,62 +243,99 @@
       });
     }
 
-    function checkSimilarity() {
-      const cells = Array.from(document.querySelectorAll('#excelTable td'));
-      const valueMap = {};
+    function normalizeDate(dateStr) {
+      if (/^\d{4}\/\d{2}\/\d{2}$/.test(dateStr)) return dateStr;
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+        const [d, m, y] = dateStr.split('/');
+        return `${y}/${m}/${d}`;
+      }
+      return '';
+    }
 
-      cells.forEach(cell => {
-        cell.classList.remove('match-exact');
-        const val = cell.textContent.trim();
-        if (/^\d+(\.\d+)?$/.test(val)) {
-          if (!valueMap[val]) valueMap[val] = [];
-          valueMap[val].push(cell);
+    function checkConflicts() {
+      const rows = Array.from(document.querySelectorAll('#excelTable tbody tr'));
+      rows.forEach(row => {
+        row.classList.remove('conflict-host', 'conflict-time', 'conflict-place', 'conflict-role');
+        if (!row.classList.contains('confirmed') && !row.classList.contains('cancelled')) {
+          row.style.backgroundColor = '';
         }
       });
 
-      Object.values(valueMap).forEach(group => {
-        if (group.length > 1) {
-          group.forEach(cell => {
-            cell.classList.add('match-exact');
-          });
+      for (let i = 0; i < rows.length; i++) {
+        const rowA = rows[i];
+        const dataA = Array.from(rowA.children).map(cell => cell.textContent.trim());
+        const [hostA, placeA, guestA, timeA, dateA] = dataA;
+        const normDateA = normalizeDate(dateA);
+
+        for (let j = i + 1; j < rows.length; j++) {
+          const rowB = rows[j];
+          const dataB = Array.from(rowB.children).map(cell => cell.textContent.trim());
+          const [hostB, placeB, guestB, timeB, dateB] = dataB;
+          const normDateB = normalizeDate(dateB);
+
+          if (normDateA === '' || normDateB === '' || normDateA !== normDateB) continue;
+          if (!timeA.match(/^\d{2}:\d{2}$/) || !timeB.match(/^\d{2}:\d{2}$/)) continue;
+
+          const [hA, mA] = timeA.split(':').map(Number);
+          const [hB, mB] = timeB.split(':').map(Number);
+          const diffMinutes = Math.abs((hA * 60 + mA) - (hB * 60 + mB));
+
+          if ((hostA === hostB || guestA === guestB) && timeA === timeB) {
+            rowA.classList.add('conflict-host');
+            rowB.classList.add('conflict-host');
+          } else if ((hostA === hostB || guestA === guestB) && diffMinutes < 60) {
+            rowA.classList.add('conflict-time');
+            rowB.classList.add('conflict-time');
+          } else if (placeA === placeB && timeA === timeB) {
+            rowA.classList.add('conflict-place');
+            rowB.classList.add('conflict-place');
+          } else if ((hostA === guestB || hostB === guestA) && timeA === timeB) {
+            rowA.classList.add('conflict-role');
+            rowB.classList.add('conflict-role');
+          }
         }
-      });
+      }
     }
 
-    document.addEventListener('input', () => {
-      checkSimilarity();
-    });
-
-    function exportExcel() {
+    function autoSaveRow() {
       const table = document.getElementById('excelTable');
-      const rows = Array.from(table.querySelectorAll('tr'));
-      const data = [];
-
-      rows.forEach(row => {
-        const cells = Array.from(row.querySelectorAll('th, td'));
-        const rowData = cells.map(cell => cell.textContent.trim());
-        if (rowData.length > 0) data.push(rowData);
+      const rows = Array.from(table.querySelectorAll('tbody tr'));
+      const saved = localStorage.getItem('theraTable');
+      const oldData = saved ? JSON.parse(saved) : [];
+      const newData = rows.map(row => {
+        return Array.from(row.children).map(cell => cell.textContent.trim());
       });
-
-      const worksheet = XLSX.utils.aoa_to_sheet(data);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "TheraWork");
-      XLSX.writeFile(workbook, "TheraWork.xlsx");
+      const merged = [...oldData, ...newData];
+      localStorage.setItem('theraTable', JSON.stringify(merged));
     }
 
-    function saveTable() {
-      const table = document.getElementById('excelTable');
-      const rows = Array.from(table.querySelectorAll('tr'));
-      const data = [];
+    function showSaveOptions() {
+      const choice = prompt("اختر طريقة الحفظ:\n1 - حفظ ملف\n2 - حفظ تلقائي");
+      if (choice === "1") {
+        const name = prompt("أدخل اسم الملف:");
+        if (!name) return;
+        const table = document.getElementById('excelTable');
+        const rows = Array.from(table.querySelectorAll('tr'));
+        const data = rows.map(row =>
+          Array.from(row.querySelectorAll('th, td')).map(cell => cell.textContent.trim())
+        );
+        const worksheet = XLSX.utils.aoa_to_sheet(data);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "TheraWork");
+        XLSX.writeFile(workbook, name + ".xlsx");
+      } else {
+        autoSaveRow();
+        alert("✅ تم حفظ البيانات تلقائيًا.");
+      }
+    }
 
-      rows.forEach(row => {
-        const cells = Array.from(row.querySelectorAll('th, td'));
-        const rowData = cells.map(cell => cell.textContent.trim());
-        data.push(rowData);
-      });
-
-      localStorage.setItem('theraTable', JSON.stringify(data));
-      alert('✅ تم حفظ البيانات على جهازك.');
+    function showLoadOptions() {
+      const choice = prompt("اختر طريقة الاسترجاع:\n1 - استرجاع ملف\n2 - استرجاع تلقائي");
+      if (choice === "1") {
+        alert("📂 اختر ملف Excel من جهازك لفتحه (هذه الميزة تتطلب دعم إضافي من المتصفح).");
+      } else {
+        loadTable();
+      }
     }
 
     function loadTable() {
@@ -199,33 +344,38 @@
 
       const data = JSON.parse(saved);
       const table = document.getElementById('excelTable');
-      table.innerHTML = '';
+      table.querySelector('tbody').innerHTML = '';
 
-      const thead = document.createElement('thead');
-      const headerRow = document.createElement('tr');
-      data[0].forEach(cell => {
-        const th = document.createElement('th');
-        th.contentEditable = true;
-        th.textContent = cell;
-        headerRow.appendChild(th);
-      });
-      thead.appendChild(headerRow);
-      table.appendChild(thead);
-
-      const tbody = document.createElement('tbody');
-      data.slice(1).forEach(rowData => {
+      data.forEach(rowData => {
         const row = document.createElement('tr');
-        rowData.forEach(cell => {
+        rowData.slice(0, 5).forEach(cell => {
           const td = document.createElement('td');
           td.contentEditable = true;
           td.textContent = cell;
+          td.addEventListener('blur', autoSaveRow);
           row.appendChild(td);
         });
-        tbody.appendChild(row);
+        const statusTd = document.createElement('td');
+        const div = document.createElement('div');
+        div.className = 'status-buttons';
+        div.innerHTML = `
+          <button onclick="markConfirmed(this)">✅</button>
+          <button onclick="markCancelled(this)">❌</button>
+        `;
+        statusTd.appendChild(div);
+        row.appendChild(statusTd);
+        table.querySelector('tbody').appendChild(row);
       });
-      table.appendChild(tbody);
-      checkSimilarity();
+      checkConflicts();
     }
+
+    document.addEventListener('input', () => {
+      checkConflicts();
+    });
+
+    window.onload = () => {
+      loadTable();
+    };
   </script>
 </body>
 </html>
