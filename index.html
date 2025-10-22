@@ -12,27 +12,18 @@
       padding: 10px;
       background: #f9f9f9;
     }
-    .search-bar {
+    .search-bar, .filters, .actions {
       display: flex;
-      align-items: center;
-      gap: 5px;
+      gap: 10px;
       margin-bottom: 10px;
+      flex-wrap: wrap;
+      align-items: center;
     }
     #searchInput {
       flex: 1;
       padding: 6px;
       font-size: 14px;
       max-width: 250px;
-    }
-    .filters {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-    .filters button {
-      padding: 6px 10px;
-      font-size: 14px;
-      cursor: pointer;
     }
     .legend {
       display: none;
@@ -44,12 +35,6 @@
     .legend p {
       margin: 5px 0;
       font-size: 14px;
-    }
-    .actions {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-bottom: 15px;
     }
     table {
       border-collapse: collapse;
@@ -70,33 +55,34 @@
     th[contenteditable="true"] {
       outline: none;
     }
-    .match-exact {
-      background-color: #ffcccc !important;
-    }
-    .confirmed {
-      background-color: #d4edda !important;
-    }
-    .cancelled {
-      opacity: 0.4;
-      pointer-events: none;
-    }
-    .conflict-host {
-      background-color: #ffcccc !important;
-    }
-    .conflict-time {
-      background-color: #fff3cd !important;
-    }
-    .conflict-place {
-      background-color: #e0ccff !important;
-    }
-    .conflict-role {
-      background-color: #cce5ff !important;
-    }
+    .match-exact { background-color: #ffcccc !important; }
+    .confirmed { background-color: #d4edda !important; }
+    .cancelled { opacity: 0.4; }
+    .conflict-host { background-color: #ffcccc !important; }
+    .conflict-time { background-color: #fff3cd !important; }
+    .conflict-place { background-color: #e0ccff !important; }
+    .conflict-place-soft { background-color: #f3e6ff !important; }
+    .conflict-role { background-color: #cce5ff !important; }
+    .conflict-doc { background-color: #deb887 !important; }
     .status-buttons {
       display: flex;
       gap: 5px;
       justify-content: center;
       margin-top: 5px;
+    }
+    .doc-box {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      align-items: center;
+    }
+    .doc-name-button {
+      background: none;
+      border: none;
+      color: blue;
+      text-decoration: underline;
+      cursor: pointer;
+      font-size: 14px;
     }
   </style>
 </head>
@@ -109,12 +95,14 @@
   </div>
 
   <div class="legend" id="legendBox">
-    <p style="background:#ffcccc">أحمر: تضارب المستضيف أو المستضاف بنفس الساعة</p>
+    <p style="background:#ffcccc">أحمر: المستضيف أو المستضاف لديه موعد بنفس الساعة</p>
     <p style="background:#fff3cd">أصفر: تضارب بفارق أقل من ساعة</p>
-    <p style="background:#e0ccff">بنفسجي: تضارب المكان بنفس الساعة</p>
-    <p style="background:#cce5ff">أزرق: المستضيف هو المستضاف في صف آخر بنفس الساعة</p>
+    <p style="background:#e0ccff">بنفسجي: نفس المكان بنفس الساعة</p>
+    <p style="background:#f3e6ff">بنفسجي فاتح: نفس المكان بفارق أقل من ساعة</p>
+    <p style="background:#cce5ff">أزرق: المستضيف هو المستضاف في موعد آخر بنفس الساعة والعكس</p>
     <p style="background:#d4edda">أخضر: الموعد تم ترتيبه</p>
     <p style="opacity:0.5">شفاف: الموعد تم إلغاؤه</p>
+    <p style="background:#deb887">بني: تم رفع نفس الوثيقة أكثر من مرة</p>
   </div>
 
   <div class="filters">
@@ -141,6 +129,7 @@
         <th contenteditable="true">المستضاف</th>
         <th contenteditable="true">الساعة</th>
         <th contenteditable="true">التاريخ</th>
+        <th>الوثائق</th>
         <th>الحالة</th>
       </tr>
     </thead>
@@ -152,6 +141,11 @@
         <td contenteditable="true"></td>
         <td contenteditable="true"></td>
         <td>
+          <div class="doc-box">
+            <input type="file" accept=".pdf,image/*" onchange="handleFileUpload(this)">
+          </div>
+        </td>
+        <td>
           <div class="status-buttons">
             <button onclick="markConfirmed(this)">✅</button>
             <button onclick="markCancelled(this)">❌</button>
@@ -161,228 +155,369 @@
     </tbody>
   </table>
   <script>
-    function toggleLegend() {
-      const legend = document.getElementById('legendBox');
-      legend.style.display = legend.style.display === 'none' ? 'block' : 'none';
-    }
+function toggleLegend() {
+  const legend = document.getElementById('legendBox');
+  legend.style.display = legend.style.display === 'none' ? 'block' : 'none';
+}
 
-    function addColumn() {
-      const header = document.getElementById('headerRow');
-      const th = document.createElement('th');
-      th.contentEditable = true;
-      header.appendChild(th);
+function addColumn() {
+  const header = document.getElementById('headerRow');
+  const th = document.createElement('th');
+  th.contentEditable = true;
+  header.insertBefore(th, header.querySelector('th:nth-last-child(2)'));
 
-      const rows = document.querySelectorAll('#excelTable tbody tr');
-      rows.forEach(row => {
-        const td = document.createElement('td');
-        td.contentEditable = true;
-        td.addEventListener('blur', autoSaveRow);
-        row.appendChild(td);
-      });
-    }
+  const rows = document.querySelectorAll('#excelTable tbody tr');
+  rows.forEach(row => {
+    const td = document.createElement('td');
+    td.contentEditable = true;
+    td.addEventListener('blur', autoSaveRow);
+    row.insertBefore(td, row.querySelector('td:nth-last-child(2)'));
+  });
+}
 
-    function addRow() {
-      const row = document.createElement('tr');
-      const colCount = document.getElementById('headerRow').children.length;
-      for (let i = 0; i < colCount - 1; i++) {
-        const td = document.createElement('td');
-        td.contentEditable = true;
-        td.addEventListener('blur', autoSaveRow);
-        row.appendChild(td);
-      }
-      const statusTd = document.createElement('td');
+function addRow() {
+  const row = document.createElement('tr');
+  const headerCells = document.querySelectorAll('#headerRow th');
+
+  headerCells.forEach(th => {
+    const label = th.textContent.trim();
+    let td;
+
+    if (label === "الحالة") {
+      td = document.createElement('td');
       const div = document.createElement('div');
       div.className = 'status-buttons';
       div.innerHTML = `
         <button onclick="markConfirmed(this)">✅</button>
         <button onclick="markCancelled(this)">❌</button>
       `;
-      statusTd.appendChild(div);
-      row.appendChild(statusTd);
-      document.querySelector('#excelTable tbody').appendChild(row);
+      td.appendChild(div);
+    } else if (label === "الوثائق") {
+      td = document.createElement('td');
+      const div = document.createElement('div');
+      div.className = 'doc-box';
+      div.innerHTML = `<input type="file" accept=".pdf,image/*" onchange="handleFileUpload(this)">`;
+      td.appendChild(div);
+    } else {
+      td = document.createElement('td');
+      td.contentEditable = true;
+      td.addEventListener('blur', autoSaveRow);
     }
 
-    function markConfirmed(btn) {
-      const row = btn.closest('tr');
-      row.classList.remove('cancelled');
-      row.classList.add('confirmed');
-      autoSaveRow();
-    }
+    row.appendChild(td);
+  });
 
-    function markCancelled(btn) {
-      const row = btn.closest('tr');
-      row.classList.remove('confirmed');
-      row.classList.add('cancelled');
-      autoSaveRow();
-    }
+  document.querySelector('#excelTable tbody').appendChild(row);
+}
 
-    function filterRows(type) {
-      const rows = document.querySelectorAll('#excelTable tbody tr');
-      rows.forEach(row => {
-        row.style.display = '';
-        if (type === 'confirmed' && !row.classList.contains('confirmed')) row.style.display = 'none';
-        if (type === 'cancelled' && !row.classList.contains('cancelled')) row.style.display = 'none';
-        if (type === 'pending' && (row.classList.contains('confirmed') || row.classList.contains('cancelled'))) row.style.display = 'none';
-      });
-    }
+function markConfirmed(btn) {
+  const row = btn.closest('tr');
+  row.classList.remove('cancelled');
+  row.classList.add('confirmed');
+  autoSaveRow();
+}
 
-    function clearSearch() {
-      document.getElementById('searchInput').value = '';
-      filterTable('');
-    }
+function markCancelled(btn) {
+  const row = btn.closest('tr');
+  row.classList.remove('confirmed');
+  row.classList.add('cancelled');
+  autoSaveRow();
+}
 
-    document.getElementById('searchInput').addEventListener('input', e => {
-      filterTable(e.target.value.trim());
+function clearSearch() {
+  document.getElementById('searchInput').value = '';
+  filterTable('');
+}
+
+document.getElementById('searchInput').addEventListener('input', e => {
+  filterTable(e.target.value.trim());
+});
+
+function filterTable(query) {
+  const rows = document.querySelectorAll('#excelTable tbody tr');
+  rows.forEach(row => {
+    const match = Array.from(row.cells).some(cell =>
+      cell.textContent.toLowerCase().includes(query.toLowerCase())
+    );
+    row.style.display = query === '' || match ? '' : 'none';
+  });
+}
+
+function filterRows(type) {
+  const rows = document.querySelectorAll('#excelTable tbody tr');
+  rows.forEach(row => {
+    const isConfirmed = row.classList.contains('confirmed');
+    const isCancelled = row.classList.contains('cancelled');
+    const hasStatus = isConfirmed || isCancelled;
+
+    if (type === 'all') {
+      row.style.display = '';
+    } else if (type === 'confirmed') {
+      row.style.display = isConfirmed ? '' : 'none';
+    } else if (type === 'cancelled') {
+      row.style.display = isCancelled ? '' : 'none';
+    } else if (type === 'pending') {
+      row.style.display = !hasStatus ? '' : 'none';
+    }
+  });
+}
+</script>
+<script>
+function checkConflicts() {
+  const rows = Array.from(document.querySelectorAll('#excelTable tbody tr'));
+  const data = [];
+
+  rows.forEach(row => {
+    row.querySelectorAll('td').forEach(cell => {
+      cell.classList.remove(
+        'conflict-host', 'conflict-time', 'conflict-place',
+        'conflict-place-soft', 'conflict-role'
+      );
     });
+  });
 
-    function filterTable(query) {
-      const rows = document.querySelectorAll('#excelTable tbody tr');
-      rows.forEach(row => {
-        const match = Array.from(row.children).some(cell =>
-          cell.textContent.includes(query)
-        );
-        row.style.display = query === '' || match ? '' : 'none';
-      });
+  rows.forEach((row, index) => {
+    const cells = row.querySelectorAll('td');
+    const host = cells[0]?.textContent.trim();
+    const place = cells[1]?.textContent.trim();
+    const guest = cells[2]?.textContent.trim();
+    const time = cells[3]?.textContent.trim();
+    const date = normalizeDate(cells[4]?.textContent.trim());
+
+    if (host && guest && time && date) {
+      data.push({ index, host, guest, place, time, date });
     }
+  });
 
-    function normalizeDate(dateStr) {
-      if (/^\d{4}\/\d{2}\/\d{2}$/.test(dateStr)) return dateStr;
-      if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
-        const [d, m, y] = dateStr.split('/');
-        return `${y}/${m}/${d}`;
-      }
-      return '';
-    }
+  for (let i = 0; i < data.length; i++) {
+    for (let j = i + 1; j < data.length; j++) {
+      const a = data[i], b = data[j];
+      if (a.date !== b.date) continue;
 
-    function checkConflicts() {
-      const rows = Array.from(document.querySelectorAll('#excelTable tbody tr'));
-      rows.forEach(row => {
-        row.classList.remove('conflict-host', 'conflict-time', 'conflict-place', 'conflict-role');
-        if (!row.classList.contains('confirmed') && !row.classList.contains('cancelled')) {
-          row.style.backgroundColor = '';
+      const tA = timeToMinutes(a.time);
+      const tB = timeToMinutes(b.time);
+      const sameTime = tA === tB;
+      const timeDiff = Math.abs(tA - tB);
+
+      const rowA = rows[a.index].querySelectorAll('td');
+      const rowB = rows[b.index].querySelectorAll('td');
+
+      // تضارب المستضيف أو المستضاف بنفس الساعة
+      if (sameTime && (a.host === b.host || a.guest === b.guest)) {
+        if (a.host === b.host) {
+          rowA[0].classList.add('conflict-host');
+          rowB[0].classList.add('conflict-host');
         }
-      });
-
-      for (let i = 0; i < rows.length; i++) {
-        const rowA = rows[i];
-        const dataA = Array.from(rowA.children).map(cell => cell.textContent.trim());
-        const [hostA, placeA, guestA, timeA, dateA] = dataA;
-        const normDateA = normalizeDate(dateA);
-
-        for (let j = i + 1; j < rows.length; j++) {
-          const rowB = rows[j];
-          const dataB = Array.from(rowB.children).map(cell => cell.textContent.trim());
-          const [hostB, placeB, guestB, timeB, dateB] = dataB;
-          const normDateB = normalizeDate(dateB);
-
-          if (normDateA === '' || normDateB === '' || normDateA !== normDateB) continue;
-          if (!timeA.match(/^\d{2}:\d{2}$/) || !timeB.match(/^\d{2}:\d{2}$/)) continue;
-
-          const [hA, mA] = timeA.split(':').map(Number);
-          const [hB, mB] = timeB.split(':').map(Number);
-          const diffMinutes = Math.abs((hA * 60 + mA) - (hB * 60 + mB));
-
-          if ((hostA === hostB || guestA === guestB) && timeA === timeB) {
-            rowA.classList.add('conflict-host');
-            rowB.classList.add('conflict-host');
-          } else if ((hostA === hostB || guestA === guestB) && diffMinutes < 60) {
-            rowA.classList.add('conflict-time');
-            rowB.classList.add('conflict-time');
-          } else if (placeA === placeB && timeA === timeB) {
-            rowA.classList.add('conflict-place');
-            rowB.classList.add('conflict-place');
-          } else if ((hostA === guestB || hostB === guestA) && timeA === timeB) {
-            rowA.classList.add('conflict-role');
-            rowB.classList.add('conflict-role');
-          }
+        if (a.guest === b.guest) {
+          rowA[2].classList.add('conflict-host');
+          rowB[2].classList.add('conflict-host');
         }
       }
-    }
 
-    function autoSaveRow() {
-      const table = document.getElementById('excelTable');
-      const rows = Array.from(table.querySelectorAll('tbody tr'));
-      const newData = rows.map(row => {
-        return Array.from(row.children).map(cell => cell.textContent.trim());
-      });
-      localStorage.setItem('theraTable', JSON.stringify(newData));
-    }
+      // تضارب المكان بنفس الساعة
+      if (sameTime && a.place && b.place && a.place === b.place) {
+        rowA[1].classList.add('conflict-place');
+        rowB[1].classList.add('conflict-place');
+      }
 
-    function showSaveOptions() {
-      const choice = prompt("اختر طريقة الحفظ:\n1 - حفظ ملف\n2 - حفظ تلقائي");
-      if (choice === "1") {
-        const name = prompt("أدخل اسم الملف:");
-        if (!name) return;
-        const table = document.getElementById('excelTable');
-        const rows = Array.from(table.querySelectorAll('tr'));
-        const data = rows.map(row =>
-          Array.from(row.querySelectorAll('th, td')).map(cell => cell.textContent.trim())
-        );
-        const worksheet = XLSX.utils.aoa_to_sheet(data);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "TheraWork");
-        XLSX.writeFile(workbook, name + ".xlsx");
-      } else {
-        autoSaveRow();
-        alert("✅ تم حفظ البيانات تلقائيًا.");
+      // تضارب المكان بفارق أقل من ساعة
+      if (timeDiff > 0 && timeDiff < 60 && a.place === b.place) {
+        rowA[1].classList.add('conflict-place-soft');
+        rowB[1].classList.add('conflict-place-soft');
+      }
+
+      // المستضيف هو المستضاف في موعد آخر بنفس الساعة
+      if (sameTime && ((a.host === b.guest) || (a.guest === b.host))) {
+        rowA[2].classList.add('conflict-role');
+        rowB[2].classList.add('conflict-role');
+      }
+
+      // تضارب بفارق أقل من ساعة لنفس الشخص
+      if (timeDiff > 0 && timeDiff < 60 && (a.host === b.host || a.guest === b.guest)) {
+        rowA[3].classList.add('conflict-time');
+        rowB[3].classList.add('conflict-time');
       }
     }
+  }
+}
 
-    function showLoadOptions() {
-      const choice = prompt("اختر طريقة الاسترجاع:\n1 - استرجاع ملف\n2 - استرجاع تلقائي");
-      if (choice === "1") {
-        alert("📂 اختر ملف Excel من جهازك لفتحه (هذه الميزة تتطلب دعم إضافي من المتصفح).");
-      } else {
-        loadTable();
+function normalizeDate(input) {
+  if (!input) return "";
+
+  const arabicMonths = {
+    "كانون الثاني": "01", "شباط": "02", "آذار": "03", "نيسان": "04",
+    "أيار": "05", "حزيران": "06", "تموز": "07", "آب": "08",
+    "أيلول": "09", "تشرين الأول": "10", "تشرين الثاني": "11", "كانون الأول": "12"
+  };
+
+  input = input.trim().replace(/\s+/g, ' ');
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(input)) return input;
+
+  const parts = input.split(/[-\/\.]/);
+  if (parts.length === 3) {
+    const [d1, d2, d3] = parts.map(p => p.padStart(2, '0'));
+    if (d1.length === 4) return `${d1}-${d2}-${d3}`;
+    return `${d3}-${d2}-${d1}`;
+  }
+
+  const match1 = input.match(/^(\d{1,2}) ([\u0600-\u06FF\s]+) (\d{4})$/);
+  if (match1) {
+    const day = match1[1].padStart(2, '0');
+    const month = arabicMonths[match1[2].trim()] || "00";
+    const year = match1[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  const match2 = input.match(/^(\d{4}) ([\u0600-\u06FF\s]+) (\d{1,2})$/);
+  if (match2) {
+    const year = match2[1];
+    const month = arabicMonths[match2[2].trim()] || "00";
+    const day = match2[3].padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  return input;
+}
+
+function timeToMinutes(timeStr) {
+  const [h, m] = timeStr.split(':').map(Number);
+  return h * 60 + m;
+}
+</script>
+<script>
+function autoSaveRow() {
+  const table = document.getElementById('excelTable');
+  const rows = Array.from(table.querySelectorAll('tbody tr'));
+  const newData = rows.map(row => {
+    return Array.from(row.children).map(cell => {
+      const doc = cell.querySelector('.doc-box');
+      if (doc && doc.getAttribute('data-file')) {
+        return doc.getAttribute('data-file');
       }
-    }
+      return cell.textContent.trim();
+    });
+  });
+  localStorage.setItem('theraTable', JSON.stringify(newData));
+  checkConflicts();
+  highlightDuplicateDocs();
+}
 
-    function loadTable() {
-      const saved = localStorage.getItem('theraTable');
-      if (!saved) return alert('⚠️ لا توجد بيانات محفوظة.');
+function showSaveOptions() {
+  const choice = prompt("اختر طريقة الحفظ:\n1 - حفظ ملف\n2 - حفظ تلقائي");
+  if (choice === "1") {
+    const name = prompt("أدخل اسم الملف:");
+    if (!name) return;
+    const table = document.getElementById('excelTable');
+    const rows = Array.from(table.querySelectorAll('tr'));
+    const data = rows.map(row =>
+      Array.from(row.querySelectorAll('th, td')).map(cell => cell.textContent.trim())
+    );
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "TheraWork");
+    XLSX.writeFile(workbook, name + ".xlsx");
+  } else {
+    autoSaveRow();
+    alert("✅ تم حفظ البيانات تلقائيًا.");
+  }
+}
 
-      const data = JSON.parse(saved);
-      const table = document.getElementById('excelTable');
-      table.querySelector('tbody').innerHTML = '';
+function showLoadOptions() {
+  const choice = prompt("اختر طريقة الاسترجاع:\n1 - استرجاع ملف\n2 - استرجاع تلقائي");
+  if (choice === "1") {
+    alert("📂 اختر ملف Excel من جهازك لفتحه (هذه الميزة تتطلب دعم إضافي من المتصفح).");
+  } else {
+    loadTable();
+  }
+}
 
-      data.forEach(rowData => {
-        const row = document.createElement('tr');
-        rowData.slice(0, 5).forEach(cell => {
-          const td = document.createElement('td');
-          td.contentEditable = true;
-          td.textContent = cell;
-          td.addEventListener('blur', autoSaveRow);
-          row.appendChild(td);
-        });
-        const statusTd = document.createElement('td');
+function loadTable() {
+  const saved = localStorage.getItem('theraTable');
+  if (!saved) return alert('⚠️ لا توجد بيانات محفوظة.');
+
+  const data = JSON.parse(saved);
+  const table = document.getElementById('excelTable');
+  const header = document.getElementById('headerRow');
+  const totalCols = header.children.length;
+
+  table.querySelector('tbody').innerHTML = '';
+
+  data.forEach(rowData => {
+    const row = document.createElement('tr');
+
+    for (let i = 0; i < totalCols; i++) {
+      const label = header.children[i].textContent.trim();
+      let td;
+
+      if (label === "الحالة") {
+        td = document.createElement('td');
         const div = document.createElement('div');
         div.className = 'status-buttons';
         div.innerHTML = `
           <button onclick="markConfirmed(this)">✅</button>
           <button onclick="markCancelled(this)">❌</button>
         `;
-        statusTd.appendChild(div);
-        row.appendChild(statusTd);
-        table.querySelector('tbody').appendChild(row);
-      });
-      checkConflicts();
+        td.appendChild(div);
+      } else if (label === "الوثائق") {
+        td = document.createElement('td');
+        const div = document.createElement('div');
+        div.className = 'doc-box';
+        const fileData = rowData[i];
+        if (fileData && fileData.startsWith('data:')) {
+          const fileName = "وثيقة";
+          div.innerHTML = `<button class="doc-name-button" onclick="showDocOptions(this, '${fileData}', '${fileName}')">${fileName}</button>`;
+          div.setAttribute('data-file', fileData);
+          div.setAttribute('data-name', fileName);
+        } else {
+          div.innerHTML = `<input type="file" accept=".pdf,image/*" onchange="handleFileUpload(this)">`;
+        }
+        td.appendChild(div);
+      } else {
+        td = document.createElement('td');
+        td.contentEditable = true;
+        td.textContent = rowData[i] || '';
+        td.addEventListener('blur', autoSaveRow);
+      }
+
+      row.appendChild(td);
     }
 
-    function resetTable() {
-      if (!confirm("هل أنت متأكد أنك تريد إزالة كل المعلومات؟")) return;
-      localStorage.removeItem('theraTable');
-      const tbody = document.querySelector('#excelTable tbody');
-      tbody.innerHTML = '';
-      addRow();
-    }
+    table.querySelector('tbody').appendChild(row);
+  });
 
-    document.addEventListener('input', () => {
-      checkConflicts();
-    });
+  checkConflicts();
+  highlightDuplicateDocs();
+}
 
-    window.onload = () => {
-      loadTable();
-    };
-  </script>
+function exportExcel() {
+  const table = document.getElementById('excelTable');
+  const rows = Array.from(table.querySelectorAll('tr'));
+  const data = rows.map(row =>
+    Array.from(row.querySelectorAll('th, td')).map(cell => cell.textContent.trim())
+  );
+  const worksheet = XLSX.utils.aoa_to_sheet(data);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "TheraWork");
+  XLSX.writeFile(workbook, "TheraWork.xlsx");
+}
+
+function resetTable() {
+  if (!confirm("هل أنت متأكد أنك تريد إزالة كل المعلومات؟")) return;
+  localStorage.removeItem('theraTable');
+  const tbody = document.querySelector('#excelTable tbody');
+  tbody.innerHTML = '';
+  addRow();
+}
+
+document.addEventListener('input', () => {
+  checkConflicts();
+});
+
+window.onload = () => {
+  loadTable();
+  filterRows('all');
+};
+</script>
 </body>
 </html>
