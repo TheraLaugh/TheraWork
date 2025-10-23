@@ -648,8 +648,9 @@ function exportAsJSON(filename = "TheraWork") {
       }
     });
 
-    let status = "❌️";
+    let status = "none";
     if (row.classList.contains("confirmed")) status = "✅️";
+    else if (row.classList.contains("cancelled")) status = "❌️";
     else if (acceptedMap.has(row)) status = "💡";
     rowData.push({ status });
 
@@ -664,6 +665,7 @@ function exportAsJSON(filename = "TheraWork") {
   a.download = filename + ".json";
   a.click();
 }
+
 
 function loadTable() {
   const saved = localStorage.getItem('theraTable');
@@ -796,6 +798,7 @@ function prepareShare() {
       document.querySelectorAll('.share-check').forEach(cb => cb.checked = checkbox.checked);
     };
     th.appendChild(checkbox);
+
     const btn = document.createElement('button');
     btn.textContent = 'اكمل';
     btn.onclick = () => {
@@ -805,8 +808,9 @@ function prepareShare() {
 
       const allRows = Array.from(document.querySelectorAll('#excelTable tbody tr'));
       const data = selected.map(i => {
+        const row = allRows[i];
         const rowData = [];
-        allRows[i].querySelectorAll('td').forEach((cell, j) => {
+        row.querySelectorAll('td').forEach((cell, j) => {
           const doc = cell.querySelector('.doc-box');
           if (doc && doc.getAttribute('data-file')) {
             rowData.push({ type: "file", name: doc.getAttribute('data-name'), data: doc.getAttribute('data-file') });
@@ -815,9 +819,10 @@ function prepareShare() {
           }
         });
 
-        let status = "❌️";
-        if (allRows[i].classList.contains("confirmed")) status = "✅️";
-        else if (acceptedMap.has(allRows[i])) status = "💡";
+        let status = "none";
+        if (row.classList.contains("confirmed")) status = "✅️";
+        else if (row.classList.contains("cancelled")) status = "❌️";
+        else if (acceptedMap.has(row)) status = "💡";
         rowData.push({ status });
 
         return rowData;
@@ -833,6 +838,7 @@ function prepareShare() {
       a.download = name + ".json";
       a.click();
     };
+
     th.appendChild(btn);
     header.appendChild(th);
   }
