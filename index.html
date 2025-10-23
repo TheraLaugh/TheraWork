@@ -25,7 +25,7 @@
       font-size: 14px;
       max-width: 250px;
     }
-    .legend {
+    .legend, #logMenu, #notificationCenter {
       display: none;
       background: #fff;
       border: 1px solid #ccc;
@@ -55,9 +55,9 @@
     th[contenteditable="true"] {
       outline: none;
     }
-    .match-exact { background-color: #ffcccc !important; }
     .confirmed { background-color: #d4edda !important; }
     .cancelled { opacity: 0.4; }
+    .accepted { color: blue; font-weight: bold; }
     .conflict-host { background-color: #ffcccc !important; }
     .conflict-time { background-color: #fff3cd !important; }
     .conflict-place { background-color: #e0ccff !important; }
@@ -84,6 +84,19 @@
       cursor: pointer;
       font-size: 14px;
     }
+    .bulb-button {
+      background: none;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      color: #999;
+    }
+    .bulb-on {
+      color: gold;
+    }
+    .highlighted-row {
+      outline: 2px solid #007bff;
+    }
   </style>
 </head>
 <body>
@@ -92,11 +105,13 @@
     <button onclick="toggleLegend()">≡</button>
     <input type="text" id="searchInput" placeholder="ابحث...">
     <button onclick="clearSearch()">×</button>
+    <button onclick="toggleLogMenu()" id="logButton">🕓 سجل</button>
+    <button onclick="toggleNotificationCenter()" id="notifButton">🔕</button>
   </div>
 
   <div class="legend" id="legendBox">
     <p style="background:#ffcccc">أحمر: المستضيف أو المستضاف لديه موعد بنفس الساعة</p>
-    <p style="background:#fff3cd">أصفر: تضارب بفارق أقل من ساعة</p>
+    <p style="background:#fff3cd">أصفر: تضارب بفارق أقل من ساعة لنفس الشخص</p>
     <p style="background:#e0ccff">بنفسجي: نفس المكان بنفس الساعة</p>
     <p style="background:#f3e6ff">بنفسجي فاتح: نفس المكان بفارق أقل من ساعة</p>
     <p style="background:#cce5ff">أزرق: المستضيف هو المستضاف في موعد آخر بنفس الساعة والعكس</p>
@@ -105,20 +120,56 @@
     <p style="background:#deb887">بني: تم رفع نفس الوثيقة أكثر من مرة</p>
   </div>
 
+  <div id="logMenu">
+    <button onclick="openDeletedRows()">🗑️ سلة الصفوف المحذوفة</button>
+    <button onclick="openDeletedColumns()">🗑️ سلة الأعمدة المحذوفة</button>
+    <button onclick="openImportLog()">📥 سجل الاستيراد</button>
+    <button onclick="openSiteGuide()">📘 شرح الموقع</button>
+    <hr>
+    <label>🔔 التنبيهات: 
+      <input type="checkbox" id="notifSwitch" onchange="toggleNotifications()" />
+    </label>
+    <div id="notifSettings">
+      <label>⏱ قبل الموعد بـ: <input type="number" id="notifLeadTime" value="15" /> دقيقة</label><br>
+      <label>🕒 مدة التنبيه: <input type="number" id="notifDuration" value="10" /> ثواني</label><br>
+      <label>🔊 مدة صوت التنبيه: <input type="number" id="notifSoundDuration" value="10" /> ثواني</label><br>
+      <label>🔈 تشغيل صوت التنبيه: <input type="checkbox" id="notifSound" checked /></label><br>
+      <label>📅 تنبيه عند بدء الموعد: <input type="checkbox" id="notifAtStart" checked /></label>
+    </div>
+  </div>
+
+  <div id="notificationCenter">
+    <h4>🔔 سجل التنبيهات (<span id="notifCount">0</span>)</h4>
+    <ul id="notifList"></ul>
+  </div>
+
   <div class="filters">
-    <button onclick="filterRows('all')">عرض الكل</button>
-    <button onclick="filterRows('pending')">قيد الفحص</button>
-    <button onclick="filterRows('confirmed')">تم الترتيب</button>
-    <button onclick="filterRows('cancelled')">تم الإلغاء</button>
+    <!-- فلاتر الحالة -->
+    <div style="display:flex; gap:10px;">
+      <button onclick="filterRows('all')">عرض الكل</button>
+      <button onclick="filterRows('pending')">قيد الفحص</button>
+      <button onclick="filterRows('confirmed')">تم القبول</button>
+      <button onclick="filterRows('accepted')">مقبول من طرف</button>
+      <button onclick="filterRows('cancelled')">تم الإلغاء</button>
+    </div>
+    <!-- فلاتر المصدر -->
+    <div style="display:flex; gap:10px; margin-top:5px;">
+      <button onclick="filterRows('imported')">البيانات المستوردة</button>
+      <button onclick="filterRows('local')">البيانات المحلية</button>
+      <button onclick="filterRows('conflicted')">الصفوف المتضاربة</button>
+    </div>
   </div>
 
   <div class="actions">
     <button onclick="addColumn()">➕ عمود</button>
+    <button onclick="removeColumn()">➖ عمود</button>
     <button onclick="addRow()">➕ صف</button>
+    <button onclick="enableRowDeletion()">➖ صف</button>
     <button onclick="showSaveOptions()">💾 حفظ البيانات</button>
-    <button onclick="showLoadOptions()">📂 استرجاع البيانات</button>
-    <button onclick="exportExcel()">📤 تصدير Excel</button>
+    <button onclick="showLoadOptions()">📂 إضافة بيانات</button>
+    <button onclick="exportExcel()">💿 تصدير</button>
     <button onclick="resetTable()">🗑️ إزالة الكل</button>
+    <button onclick="prepareShare()">🔗 مشاركة</button>
   </div>
 
   <table id="excelTable">
@@ -134,30 +185,35 @@
       </tr>
     </thead>
     <tbody>
-      <tr>
-        <td contenteditable="true"></td>
-        <td contenteditable="true"></td>
-        <td contenteditable="true"></td>
-        <td contenteditable="true"></td>
-        <td contenteditable="true"></td>
-        <td>
-          <div class="doc-box">
-            <input type="file" accept=".pdf,image/*" onchange="handleFileUpload(this)">
-          </div>
-        </td>
-        <td>
-          <div class="status-buttons">
-            <button onclick="markConfirmed(this)">✅</button>
-            <button onclick="markCancelled(this)">❌</button>
-          </div>
-        </td>
-      </tr>
+      <!-- الصفوف تُضاف ديناميكيًا -->
     </tbody>
   </table>
   <script>
+let importedRows = new Set();
+let localRows = new Set();
+let acceptedMap = new Map();
+let deletedRows = [];
+let deletedColumns = [];
+let notificationsEnabled = false;
+
 function toggleLegend() {
   const legend = document.getElementById('legendBox');
   legend.style.display = legend.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleLogMenu() {
+  const menu = document.getElementById('logMenu');
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleNotificationCenter() {
+  const center = document.getElementById('notificationCenter');
+  center.style.display = center.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleNotifications() {
+  notificationsEnabled = document.getElementById('notifSwitch').checked;
+  document.getElementById('notifButton').textContent = notificationsEnabled ? '🔔' : '🔕';
 }
 
 function addColumn() {
@@ -175,7 +231,21 @@ function addColumn() {
   });
 }
 
-function addRow() {
+function removeColumn() {
+  const header = document.getElementById('headerRow');
+  if (header.children.length <= 7) return;
+  const index = header.children.length - 3;
+  deletedColumns.push(header.children[index].textContent);
+  header.removeChild(header.children[index]);
+
+  const rows = document.querySelectorAll('#excelTable tbody tr');
+  rows.forEach(row => {
+    row.removeChild(row.children[index]);
+  });
+  autoSaveRow();
+}
+
+function addRow(isImported = false) {
   const row = document.createElement('tr');
   const headerCells = document.querySelectorAll('#headerRow th');
 
@@ -189,6 +259,7 @@ function addRow() {
       div.className = 'status-buttons';
       div.innerHTML = `
         <button onclick="markConfirmed(this)">✅</button>
+        <button class="bulb-button" onclick="markAccepted(this)">💡</button>
         <button onclick="markCancelled(this)">❌</button>
       `;
       td.appendChild(div);
@@ -208,12 +279,38 @@ function addRow() {
   });
 
   document.querySelector('#excelTable tbody').appendChild(row);
+
+  const index = document.querySelectorAll('#excelTable tbody tr').length - 1;
+  if (isImported) importedRows.add(index);
+  else localRows.add(index);
+  autoSaveRow();
+}
+
+function enableRowDeletion() {
+  const rows = document.querySelectorAll('#excelTable tbody tr');
+  rows.forEach(row => {
+    if (!row.querySelector('.delete-btn')) {
+      const td = document.createElement('td');
+      const btn = document.createElement('button');
+      btn.textContent = '🗑️';
+      btn.className = 'delete-btn';
+      btn.onclick = () => {
+        deletedRows.push([...row.children].map(td => td.textContent));
+        row.remove();
+        autoSaveRow();
+      };
+      td.appendChild(btn);
+      row.appendChild(td);
+    }
+  });
 }
 
 function markConfirmed(btn) {
   const row = btn.closest('tr');
   row.classList.remove('cancelled');
   row.classList.add('confirmed');
+  row.classList.remove('highlighted-row');
+  acceptedMap.delete(row);
   autoSaveRow();
 }
 
@@ -221,6 +318,33 @@ function markCancelled(btn) {
   const row = btn.closest('tr');
   row.classList.remove('confirmed');
   row.classList.add('cancelled');
+  row.classList.remove('highlighted-row');
+  acceptedMap.delete(row);
+  autoSaveRow();
+}
+
+function markAccepted(btn) {
+  const row = btn.closest('tr');
+  const cells = row.querySelectorAll('td');
+  const host = cells[0]?.textContent.trim();
+  const guest = cells[2]?.textContent.trim();
+
+  const choice = prompt("من قام بقبول الموعد؟\n1 - المستضيف\n2 - المستضاف");
+  const selected = choice === "1" ? host : guest;
+
+  acceptedMap.set(row, selected);
+  row.classList.add('highlighted-row');
+  btn.classList.add('bulb-on');
+
+  // تلوين الاسم المختار في كل الجدول
+  document.querySelectorAll('#excelTable tbody tr').forEach(r => {
+    r.querySelectorAll('td').forEach(cell => {
+      if (cell.textContent.trim() === selected) {
+        cell.classList.add('accepted');
+      }
+    });
+  });
+
   autoSaveRow();
 }
 
@@ -245,20 +369,25 @@ function filterTable(query) {
 
 function filterRows(type) {
   const rows = document.querySelectorAll('#excelTable tbody tr');
-  rows.forEach(row => {
+  rows.forEach((row, index) => {
     const isConfirmed = row.classList.contains('confirmed');
     const isCancelled = row.classList.contains('cancelled');
+    const isAccepted = acceptedMap.has(row);
     const hasStatus = isConfirmed || isCancelled;
+    const isConflicted = row.classList.contains('conflict-host') ||
+                         row.classList.contains('conflict-role') ||
+                         row.classList.contains('conflict-time') ||
+                         row.classList.contains('conflict-place') ||
+                         row.classList.contains('conflict-place-soft');
 
-    if (type === 'all') {
-      row.style.display = '';
-    } else if (type === 'confirmed') {
-      row.style.display = isConfirmed ? '' : 'none';
-    } else if (type === 'cancelled') {
-      row.style.display = isCancelled ? '' : 'none';
-    } else if (type === 'pending') {
-      row.style.display = !hasStatus ? '' : 'none';
-    }
+    if (type === 'all') row.style.display = '';
+    else if (type === 'confirmed') row.style.display = isConfirmed ? '' : 'none';
+    else if (type === 'cancelled') row.style.display = isCancelled ? '' : 'none';
+    else if (type === 'pending') row.style.display = !hasStatus && !isAccepted ? '' : 'none';
+    else if (type === 'accepted') row.style.display = isAccepted ? '' : 'none';
+    else if (type === 'imported') row.style.display = importedRows.has(index) ? '' : 'none';
+    else if (type === 'local') row.style.display = localRows.has(index) ? '' : 'none';
+    else if (type === 'conflicted') row.style.display = isConflicted ? '' : 'none';
   });
 }
 </script>
@@ -271,7 +400,7 @@ function checkConflicts() {
     row.querySelectorAll('td').forEach(cell => {
       cell.classList.remove(
         'conflict-host', 'conflict-time', 'conflict-place',
-        'conflict-place-soft', 'conflict-role'
+        'conflict-place-soft', 'conflict-role', 'conflict-doc'
       );
     });
   });
@@ -302,7 +431,6 @@ function checkConflicts() {
       const rowA = rows[a.index].querySelectorAll('td');
       const rowB = rows[b.index].querySelectorAll('td');
 
-      // تضارب المستضيف أو المستضاف بنفس الساعة
       if (sameTime && (a.host === b.host || a.guest === b.guest)) {
         if (a.host === b.host) {
           rowA[0].classList.add('conflict-host');
@@ -314,25 +442,21 @@ function checkConflicts() {
         }
       }
 
-      // تضارب المكان بنفس الساعة
       if (sameTime && a.place && b.place && a.place === b.place) {
         rowA[1].classList.add('conflict-place');
         rowB[1].classList.add('conflict-place');
       }
 
-      // تضارب المكان بفارق أقل من ساعة
       if (timeDiff > 0 && timeDiff < 60 && a.place === b.place) {
         rowA[1].classList.add('conflict-place-soft');
         rowB[1].classList.add('conflict-place-soft');
       }
 
-      // المستضيف هو المستضاف في موعد آخر بنفس الساعة
       if (sameTime && ((a.host === b.guest) || (a.guest === b.host))) {
         rowA[2].classList.add('conflict-role');
         rowB[2].classList.add('conflict-role');
       }
 
-      // تضارب بفارق أقل من ساعة لنفس الشخص
       if (timeDiff > 0 && timeDiff < 60 && (a.host === b.host || a.guest === b.guest)) {
         rowA[3].classList.add('conflict-time');
         rowB[3].classList.add('conflict-time');
@@ -343,24 +467,19 @@ function checkConflicts() {
 
 function normalizeDate(input) {
   if (!input) return "";
-
   const arabicMonths = {
     "كانون الثاني": "01", "شباط": "02", "آذار": "03", "نيسان": "04",
     "أيار": "05", "حزيران": "06", "تموز": "07", "آب": "08",
     "أيلول": "09", "تشرين الأول": "10", "تشرين الثاني": "11", "كانون الأول": "12"
   };
-
   input = input.trim().replace(/\s+/g, ' ');
-
   if (/^\d{4}-\d{2}-\d{2}$/.test(input)) return input;
-
   const parts = input.split(/[-\/\.]/);
   if (parts.length === 3) {
     const [d1, d2, d3] = parts.map(p => p.padStart(2, '0'));
     if (d1.length === 4) return `${d1}-${d2}-${d3}`;
     return `${d3}-${d2}-${d1}`;
   }
-
   const match1 = input.match(/^(\d{1,2}) ([\u0600-\u06FF\s]+) (\d{4})$/);
   if (match1) {
     const day = match1[1].padStart(2, '0');
@@ -368,7 +487,6 @@ function normalizeDate(input) {
     const year = match1[3];
     return `${year}-${month}-${day}`;
   }
-
   const match2 = input.match(/^(\d{4}) ([\u0600-\u06FF\s]+) (\d{1,2})$/);
   if (match2) {
     const year = match2[1];
@@ -376,7 +494,6 @@ function normalizeDate(input) {
     const day = match2[3].padStart(2, '0');
     return `${year}-${month}-${day}`;
   }
-
   return input;
 }
 
@@ -384,8 +501,7 @@ function timeToMinutes(timeStr) {
   const [h, m] = timeStr.split(':').map(Number);
   return h * 60 + m;
 }
-</script>
-<script>
+
 function autoSaveRow() {
   const table = document.getElementById('excelTable');
   const rows = Array.from(table.querySelectorAll('tbody tr'));
@@ -400,23 +516,92 @@ function autoSaveRow() {
   });
   localStorage.setItem('theraTable', JSON.stringify(newData));
   checkConflicts();
-  highlightDuplicateDocs();
+  scheduleNotifications();
 }
 
+function handleFileUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const div = input.parentElement;
+    div.innerHTML = `<button class="doc-name-button" onclick="openFile('${reader.result}')">${file.name}</button>`;
+    div.setAttribute('data-file', reader.result);
+    div.setAttribute('data-name', file.name);
+    autoSaveRow();
+  };
+  reader.readAsDataURL(file);
+}
+
+function openFile(dataUrl) {
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = '';
+  a.click();
+}
+
+function scheduleNotifications() {
+  if (!notificationsEnabled) return;
+
+  const rows = document.querySelectorAll('#excelTable tbody tr');
+  const now = new Date();
+  const leadMinutes = parseInt(document.getElementById('notifLeadTime').value || "15");
+  const duration = parseInt(document.getElementById('notifDuration').value || "10");
+  const soundDuration = parseInt(document.getElementById('notifSoundDuration').value || "10");
+  const playSound = document.getElementById('notifSound').checked;
+  const notifyAtStart = document.getElementById('notifAtStart').checked;
+
+  rows.forEach((row, index) => {
+    if (!row.classList.contains('confirmed')) return;
+
+    const cells = row.querySelectorAll('td');
+    const time = cells[3]?.textContent.trim();
+    const date = normalizeDate(cells[4]?.textContent.trim());
+    if (!time || !date) return;
+
+    const target = new Date(`${date}T${time}`);
+    const diff = (target - now) / 60000;
+
+    const key = `${date}-${time}`;
+    if ((diff <= leadMinutes && diff > 0) || (notifyAtStart && Math.abs(diff) < 1)) {
+      if (!document.querySelector(`[data-key="${key}"]`)) {
+        showNotification(`⏰ تنبيه لموعد الساعة ${time} بتاريخ ${date}`, duration, playSound, soundDuration, key);
+      }
+    }
+  });
+}
+
+function showNotification(msg, duration, playSound, soundDuration, key) {
+  const list = document.getElementById('notifList');
+  const item = document.createElement('li');
+  item.textContent = msg;
+  item.setAttribute('data-key', key);
+  list.prepend(item);
+
+  const count = document.getElementById('notifCount');
+  count.textContent = parseInt(count.textContent) + 1;
+
+  if (playSound) {
+    const audio = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+    audio.loop = true;
+    audio.play();
+    setTimeout(() => audio.pause(), soundDuration * 1000);
+  }
+
+  const toast = document.createElement('div');
+  toast.textContent = msg;
+  toast.style = "position:fixed;bottom:10px;right:10px;background:#ffc;padding:10px;border:1px solid #ccc;";
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), duration * 1000);
+}
+</script>
+<script>
 function showSaveOptions() {
   const choice = prompt("اختر طريقة الحفظ:\n1 - حفظ ملف\n2 - حفظ تلقائي");
   if (choice === "1") {
     const name = prompt("أدخل اسم الملف:");
     if (!name) return;
-    const table = document.getElementById('excelTable');
-    const rows = Array.from(table.querySelectorAll('tr'));
-    const data = rows.map(row =>
-      Array.from(row.querySelectorAll('th, td')).map(cell => cell.textContent.trim())
-    );
-    const worksheet = XLSX.utils.aoa_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "TheraWork");
-    XLSX.writeFile(workbook, name + ".xlsx");
+    exportAsJSON(name);
   } else {
     autoSaveRow();
     alert("✅ تم حفظ البيانات تلقائيًا.");
@@ -426,10 +611,31 @@ function showSaveOptions() {
 function showLoadOptions() {
   const choice = prompt("اختر طريقة الاسترجاع:\n1 - استرجاع ملف\n2 - استرجاع تلقائي");
   if (choice === "1") {
-    alert("📂 اختر ملف Excel من جهازك لفتحه (هذه الميزة تتطلب دعم إضافي من المتصفح).");
+    alert("📂 اختر ملف JSON من جهازك لفتحه (هذه الميزة تتطلب دعم إضافي من المتصفح).");
   } else {
     loadTable();
   }
+}
+
+function exportAsJSON(filename = "TheraWork") {
+  const table = document.getElementById('excelTable');
+  const rows = Array.from(table.querySelectorAll('tbody tr'));
+  const data = rows.map(row => {
+    return Array.from(row.children).map(cell => {
+      const doc = cell.querySelector('.doc-box');
+      if (doc && doc.getAttribute('data-file')) {
+        return { type: "file", name: doc.getAttribute('data-name'), data: doc.getAttribute('data-file') };
+      }
+      return cell.textContent.trim();
+    });
+  });
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename + ".json";
+  a.click();
 }
 
 function loadTable() {
@@ -443,7 +649,7 @@ function loadTable() {
 
   table.querySelector('tbody').innerHTML = '';
 
-  data.forEach(rowData => {
+  data.forEach((rowData, index) => {
     const row = document.createElement('tr');
 
     for (let i = 0; i < totalCols; i++) {
@@ -456,6 +662,7 @@ function loadTable() {
         div.className = 'status-buttons';
         div.innerHTML = `
           <button onclick="markConfirmed(this)">✅</button>
+          <button class="bulb-button" onclick="markAccepted(this)">💡</button>
           <button onclick="markCancelled(this)">❌</button>
         `;
         td.appendChild(div);
@@ -463,12 +670,11 @@ function loadTable() {
         td = document.createElement('td');
         const div = document.createElement('div');
         div.className = 'doc-box';
-        const fileData = rowData[i];
-        if (fileData && fileData.startsWith('data:')) {
-          const fileName = "وثيقة";
-          div.innerHTML = `<button class="doc-name-button" onclick="showDocOptions(this, '${fileData}', '${fileName}')">${fileName}</button>`;
-          div.setAttribute('data-file', fileData);
-          div.setAttribute('data-name', fileName);
+        const fileObj = rowData[i];
+        if (fileObj && fileObj.type === "file") {
+          div.innerHTML = `<button class="doc-name-button" onclick="openFile('${fileObj.data}')">${fileObj.name}</button>`;
+          div.setAttribute('data-file', fileObj.data);
+          div.setAttribute('data-name', fileObj.name);
         } else {
           div.innerHTML = `<input type="file" accept=".pdf,image/*" onchange="handleFileUpload(this)">`;
         }
@@ -476,7 +682,7 @@ function loadTable() {
       } else {
         td = document.createElement('td');
         td.contentEditable = true;
-        td.textContent = rowData[i] || '';
+        td.textContent = typeof rowData[i] === "string" ? rowData[i] : '';
         td.addEventListener('blur', autoSaveRow);
       }
 
@@ -484,10 +690,11 @@ function loadTable() {
     }
 
     table.querySelector('tbody').appendChild(row);
+    localRows.add(index);
   });
 
   checkConflicts();
-  highlightDuplicateDocs();
+  scheduleNotifications();
 }
 
 function exportExcel() {
@@ -499,7 +706,13 @@ function exportExcel() {
   const worksheet = XLSX.utils.aoa_to_sheet(data);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "TheraWork");
-  XLSX.writeFile(workbook, "TheraWork.xlsx");
+
+  const format = prompt("اختر الصيغة:\n1 - Excel\n2 - JSON");
+  if (format === "1") {
+    XLSX.writeFile(workbook, "TheraWork.xlsx");
+  } else {
+    exportAsJSON("TheraWork");
+  }
 }
 
 function resetTable() {
@@ -510,13 +723,66 @@ function resetTable() {
   addRow();
 }
 
-document.addEventListener('input', () => {
-  checkConflicts();
-});
+function prepareShare() {
+  const rows = document.querySelectorAll('#excelTable tbody tr');
+  rows.forEach(row => {
+    if (!row.querySelector('.share-check')) {
+      const td = document.createElement('td');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'share-check';
+      td.appendChild(checkbox);
+      row.appendChild(td);
+    }
+  });
+
+  const header = document.getElementById('headerRow');
+  if (!header.querySelector('.share-all')) {
+    const th = document.createElement('th');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'share-all';
+    checkbox.onclick = () => {
+      document.querySelectorAll('.share-check').forEach(cb => cb.checked = checkbox.checked);
+    };
+    th.appendChild(checkbox);
+    const btn = document.createElement('button');
+    btn.textContent = 'اكمل';
+    btn.onclick = () => {
+      const selected = Array.from(document.querySelectorAll('.share-check'))
+        .map((cb, i) => cb.checked ? i : -1)
+        .filter(i => i !== -1);
+
+      const allRows = Array.from(document.querySelectorAll('#excelTable tbody tr'));
+      const data = selected.map(i => {
+        return Array.from(allRows[i].children).map(cell => {
+          const doc = cell.querySelector('.doc-box');
+          if (doc && doc.getAttribute('data-file')) {
+            return { type: "file", name: doc.getAttribute('data-name'), data: doc.getAttribute('data-file') };
+          }
+          return cell.textContent.trim();
+        });
+      });
+
+      const name = prompt("أدخل اسم الملف:");
+      if (!name) return;
+      const json = JSON.stringify(data, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name + ".json";
+      a.click();
+    };
+    th.appendChild(btn);
+    header.appendChild(th);
+  }
+}
 
 window.onload = () => {
   loadTable();
   filterRows('all');
+  setInterval(autoSaveRow, 1000);
 };
 </script>
 </body>
