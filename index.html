@@ -100,7 +100,6 @@
   </style>
 </head>
 <body>
-
   <div class="search-bar">
     <button onclick="toggleLegend()">≡</button>
     <input type="text" id="searchInput" placeholder="ابحث...">
@@ -250,7 +249,8 @@ function toggleNotifications() {
   notificationsEnabled = document.getElementById('notifSwitch').checked;
   document.getElementById('notifButton').textContent = notificationsEnabled ? '🔔' : '🔕';
 }
-
+</script>
+<script>
 function addColumn() {
   const header = document.getElementById('headerRow');
   const th = document.createElement('th');
@@ -320,7 +320,8 @@ function addRow(isImported = false) {
   else localRows.add(index);
   autoSaveRow();
 }
-
+</script>
+<script>
 function enableRowDeletion() {
   const rows = document.querySelectorAll('#excelTable tbody tr');
   rows.forEach(row => {
@@ -371,7 +372,6 @@ function markAccepted(btn) {
   row.classList.add('highlighted-row');
   btn.classList.add('bulb-on');
 
-  // تلوين الطرف المختار فقط داخل هذا الصف
   cells.forEach(cell => {
     if (cell.textContent.trim() === selected) {
       cell.classList.add('accepted');
@@ -561,19 +561,31 @@ function timeToMinutes(timeStr) {
   const [h, m] = timeStr.split(':').map(Number);
   return h * 60 + m;
 }
-
+</script>
+<script>
 function autoSaveRow() {
   const table = document.getElementById('excelTable');
   const rows = Array.from(table.querySelectorAll('tbody tr'));
   const newData = rows.map(row => {
-    return Array.from(row.children).map(cell => {
+    const rowData = [];
+    row.querySelectorAll('td').forEach((cell, i) => {
       const doc = cell.querySelector('.doc-box');
       if (doc && doc.getAttribute('data-file')) {
-        return { type: "file", name: doc.getAttribute('data-name'), data: doc.getAttribute('data-file') };
+        rowData.push({ type: "file", name: doc.getAttribute('data-name'), data: doc.getAttribute('data-file') });
+      } else {
+        rowData.push(cell.textContent.trim());
       }
-      return cell.textContent.trim();
     });
+
+    let status = "none";
+    if (row.classList.contains("confirmed")) status = "✅️";
+    else if (row.classList.contains("cancelled")) status = "❌️";
+    else if (acceptedMap.has(row)) status = "💡";
+    rowData.push({ status });
+
+    return rowData;
   });
+
   localStorage.setItem('theraTable', JSON.stringify(newData));
   checkConflicts();
   scheduleNotifications();
@@ -626,14 +638,24 @@ function exportAsJSON(filename = "TheraWork") {
   const table = document.getElementById('excelTable');
   const rows = Array.from(table.querySelectorAll('tbody tr'));
   const data = rows.map(row => {
-    return Array.from(row.children).map(cell => {
+    const rowData = [];
+    row.querySelectorAll('td').forEach((cell, i) => {
       const doc = cell.querySelector('.doc-box');
       if (doc && doc.getAttribute('data-file')) {
-        return { type: "file", name: doc.getAttribute('data-name'), data: doc.getAttribute('data-file') };
+        rowData.push({ type: "file", name: doc.getAttribute('data-name'), data: doc.getAttribute('data-file') });
+      } else {
+        rowData.push(cell.textContent.trim());
       }
-      return cell.textContent.trim();
     });
+
+    let status = "❌️";
+    if (row.classList.contains("confirmed")) status = "✅️";
+    else if (acceptedMap.has(row)) status = "💡";
+    rowData.push({ status });
+
+    return rowData;
   });
+
   const json = JSON.stringify(data, null, 2);
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -694,6 +716,28 @@ function loadTable() {
       row.appendChild(td);
     }
 
+    const statusObj = rowData[totalCols];
+    if (statusObj?.status === "✅️") {
+      row.classList.add("confirmed");
+    } else if (statusObj?.status === "❌️") {
+      row.classList.add("cancelled");
+    } else if (statusObj?.status === "💡") {
+      row.classList.add("highlighted-row");
+      const cells = row.querySelectorAll('td');
+      const host = cells[0]?.textContent.trim();
+      const guest = cells[2]?.textContent.trim();
+      const selected = guest || host;
+      acceptedMap.set(row, selected);
+      cells.forEach(cell => {
+        if (cell.textContent.trim() === selected) {
+          cell.classList.add('accepted');
+        }
+      });
+      const bulb = row.querySelector('.bulb-button');
+      if (bulb) bulb.classList.add('bulb-on');
+    }
+    // إذا كانت الحالة "none" أو غير موجودة، لا يتم تطبيق أي شيء
+
     table.querySelector('tbody').appendChild(row);
     localRows.add(index);
   });
@@ -701,7 +745,8 @@ function loadTable() {
   checkConflicts();
   scheduleNotifications();
 }
-
+</script>
+<script>
 function exportExcel() {
   const table = document.getElementById('excelTable');
   const rows = Array.from(table.querySelectorAll('tr'));
@@ -760,13 +805,22 @@ function prepareShare() {
 
       const allRows = Array.from(document.querySelectorAll('#excelTable tbody tr'));
       const data = selected.map(i => {
-        return Array.from(allRows[i].children).map(cell => {
+        const rowData = [];
+        allRows[i].querySelectorAll('td').forEach((cell, j) => {
           const doc = cell.querySelector('.doc-box');
           if (doc && doc.getAttribute('data-file')) {
-            return { type: "file", name: doc.getAttribute('data-name'), data: doc.getAttribute('data-file') };
+            rowData.push({ type: "file", name: doc.getAttribute('data-name'), data: doc.getAttribute('data-file') });
+          } else {
+            rowData.push(cell.textContent.trim());
           }
-          return cell.textContent.trim();
         });
+
+        let status = "❌️";
+        if (allRows[i].classList.contains("confirmed")) status = "✅️";
+        else if (acceptedMap.has(allRows[i])) status = "💡";
+        rowData.push({ status });
+
+        return rowData;
       });
 
       const name = prompt("أدخل اسم الملف:");
@@ -783,7 +837,8 @@ function prepareShare() {
     header.appendChild(th);
   }
 }
-
+</script>
+<script>
 window.onload = () => {
   loadUserSettings();
   loadTable();
