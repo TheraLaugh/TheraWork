@@ -111,10 +111,10 @@
 
   <div class="legend" id="legendBox">
     <p style="background:#ffcccc">أحمر: المستضيف أو المستضاف لديه موعد بنفس الساعة</p>
-    <p style="background:#fff3cd">أصفر: تضارب بفارق أقل من ساعة لنفس الشخص</p>
+    <p style="background:#fff3cd">أصفر: تضارب بفارق أقل من الوقت المحدد لنفس الشخص أو إذا كان المستضيف هو المستضاف في موعد آخر</p>
     <p style="background:#e0ccff">بنفسجي: نفس المكان بنفس الساعة</p>
-    <p style="background:#f3e6ff">بنفسجي فاتح: نفس المكان بفارق أقل من ساعة</p>
-    <p style="background:#cce5ff">أزرق: المستضيف هو المستضاف في موعد آخر بنفس الساعة والعكس</p>
+    <p style="background:#f3e6ff">بنفسجي فاتح: نفس المكان بفارق أقل من الوقت المحدد</p>
+    <p style="background:#cce5ff">أزرق: المستضيف هو المستضاف في موعد آخر بنفس الساعة</p>
     <p style="background:#d4edda">أخضر: الموعد تم ترتيبه</p>
     <p style="opacity:0.5">شفاف: الموعد تم إلغاؤه</p>
     <p style="background:#deb887">بني: تم رفع نفس الوثيقة أكثر من مرة</p>
@@ -134,7 +134,9 @@
       <label>🕒 مدة التنبيه: <input type="number" id="notifDuration" value="10" /> ثواني</label><br>
       <label>🔊 مدة صوت التنبيه: <input type="number" id="notifSoundDuration" value="10" /> ثواني</label><br>
       <label>🔈 تشغيل صوت التنبيه: <input type="checkbox" id="notifSound" checked /></label><br>
-      <label>📅 تنبيه عند بدء الموعد: <input type="checkbox" id="notifAtStart" checked /></label>
+      <label>📅 تنبيه عند بدء الموعد: <input type="checkbox" id="notifAtStart" checked /></label><br>
+      <label>⚠️ كشف التضارب مع المواعيد الملغاة: <input type="checkbox" id="conflictWithCancelled" /></label><br>
+      <label>⏳ فارق الوقت المقبول للتضارب: <input type="number" id="conflictTimeGap" value="60" /> دقيقة</label>
     </div>
   </div>
 
@@ -144,15 +146,13 @@
   </div>
 
   <div class="filters">
-    <!-- فلاتر الحالة -->
     <div style="display:flex; gap:10px;">
       <button onclick="filterRows('all')">عرض الكل</button>
       <button onclick="filterRows('pending')">قيد الفحص</button>
-      <button onclick="filterRows('confirmed')">تم القبول</button>
+      <button onclick="filterRows('confirmed')">تم الترتيب</button>
       <button onclick="filterRows('accepted')">مقبول من طرف</button>
       <button onclick="filterRows('cancelled')">تم الإلغاء</button>
     </div>
-    <!-- فلاتر المصدر -->
     <div style="display:flex; gap:10px; margin-top:5px;">
       <button onclick="filterRows('imported')">البيانات المستوردة</button>
       <button onclick="filterRows('local')">البيانات المحلية</button>
@@ -185,7 +185,6 @@
       </tr>
     </thead>
     <tbody>
-      <!-- الصفوف تُضاف ديناميكيًا -->
     </tbody>
   </table>
   <script>
@@ -195,6 +194,42 @@ let acceptedMap = new Map();
 let deletedRows = [];
 let deletedColumns = [];
 let notificationsEnabled = false;
+let userSettings = {
+  conflictWithCancelled: false,
+  conflictTimeGap: 60,
+  notifLeadTime: 15,
+  notifDuration: 10,
+  notifSoundDuration: 10,
+  notifSound: true,
+  notifAtStart: true
+};
+
+function loadUserSettings() {
+  const saved = localStorage.getItem('theraSettings');
+  if (saved) {
+    userSettings = JSON.parse(saved);
+    document.getElementById('conflictWithCancelled').checked = userSettings.conflictWithCancelled;
+    document.getElementById('conflictTimeGap').value = userSettings.conflictTimeGap;
+    document.getElementById('notifLeadTime').value = userSettings.notifLeadTime;
+    document.getElementById('notifDuration').value = userSettings.notifDuration;
+    document.getElementById('notifSoundDuration').value = userSettings.notifSoundDuration;
+    document.getElementById('notifSound').checked = userSettings.notifSound;
+    document.getElementById('notifAtStart').checked = userSettings.notifAtStart;
+  }
+}
+
+function saveUserSettings() {
+  userSettings.conflictWithCancelled = document.getElementById('conflictWithCancelled').checked;
+  userSettings.conflictTimeGap = parseInt(document.getElementById('conflictTimeGap').value || "60");
+  userSettings.notifLeadTime = parseInt(document.getElementById('notifLeadTime').value || "15");
+  userSettings.notifDuration = parseInt(document.getElementById('notifDuration').value || "10");
+  userSettings.notifSoundDuration = parseInt(document.getElementById('notifSoundDuration').value || "10");
+  userSettings.notifSound = document.getElementById('notifSound').checked;
+  userSettings.notifAtStart = document.getElementById('notifAtStart').checked;
+  localStorage.setItem('theraSettings', JSON.stringify(userSettings));
+}
+
+document.getElementById('notifSettings').addEventListener('change', saveUserSettings);
 
 function toggleLegend() {
   const legend = document.getElementById('legendBox');
@@ -336,13 +371,11 @@ function markAccepted(btn) {
   row.classList.add('highlighted-row');
   btn.classList.add('bulb-on');
 
-  // تلوين الاسم المختار في كل الجدول
-  document.querySelectorAll('#excelTable tbody tr').forEach(r => {
-    r.querySelectorAll('td').forEach(cell => {
-      if (cell.textContent.trim() === selected) {
-        cell.classList.add('accepted');
-      }
-    });
+  // تلوين الطرف المختار فقط داخل هذا الصف
+  cells.forEach(cell => {
+    if (cell.textContent.trim() === selected) {
+      cell.classList.add('accepted');
+    }
   });
 
   autoSaveRow();
@@ -374,11 +407,7 @@ function filterRows(type) {
     const isCancelled = row.classList.contains('cancelled');
     const isAccepted = acceptedMap.has(row);
     const hasStatus = isConfirmed || isCancelled;
-    const isConflicted = row.classList.contains('conflict-host') ||
-                         row.classList.contains('conflict-role') ||
-                         row.classList.contains('conflict-time') ||
-                         row.classList.contains('conflict-place') ||
-                         row.classList.contains('conflict-place-soft');
+    const isConflicted = row.querySelector('.conflict-host, .conflict-role, .conflict-time, .conflict-place, .conflict-place-soft');
 
     if (type === 'all') row.style.display = '';
     else if (type === 'confirmed') row.style.display = isConfirmed ? '' : 'none';
@@ -395,6 +424,9 @@ function filterRows(type) {
 function checkConflicts() {
   const rows = Array.from(document.querySelectorAll('#excelTable tbody tr'));
   const data = [];
+  const fileNames = new Map();
+  const gap = parseInt(document.getElementById('conflictTimeGap').value || "60");
+  const includeCancelled = document.getElementById('conflictWithCancelled').checked;
 
   rows.forEach(row => {
     row.querySelectorAll('td').forEach(cell => {
@@ -403,9 +435,22 @@ function checkConflicts() {
         'conflict-place-soft', 'conflict-role', 'conflict-doc'
       );
     });
+
+    const docCell = row.querySelector('.doc-box');
+    if (docCell && docCell.getAttribute('data-name')) {
+      const name = docCell.getAttribute('data-name');
+      if (fileNames.has(name)) {
+        docCell.classList.add('conflict-doc');
+        fileNames.get(name).classList.add('conflict-doc');
+      } else {
+        fileNames.set(name, docCell);
+      }
+    }
   });
 
   rows.forEach((row, index) => {
+    if (!includeCancelled && row.classList.contains('cancelled')) return;
+
     const cells = row.querySelectorAll('td');
     const host = cells[0]?.textContent.trim();
     const place = cells[1]?.textContent.trim();
@@ -414,7 +459,7 @@ function checkConflicts() {
     const date = normalizeDate(cells[4]?.textContent.trim());
 
     if (host && guest && time && date) {
-      data.push({ index, host, guest, place, time, date });
+      data.push({ index, host, guest, place, time, date, cancelled: row.classList.contains('cancelled') });
     }
   });
 
@@ -447,17 +492,32 @@ function checkConflicts() {
         rowB[1].classList.add('conflict-place');
       }
 
-      if (timeDiff > 0 && timeDiff < 60 && a.place === b.place) {
+      if (timeDiff > 0 && timeDiff < gap && a.place === b.place) {
         rowA[1].classList.add('conflict-place-soft');
         rowB[1].classList.add('conflict-place-soft');
       }
 
-      if (sameTime && ((a.host === b.guest) || (a.guest === b.host))) {
-        rowA[2].classList.add('conflict-role');
+      if (sameTime && a.host === b.guest) {
+        rowA[0].classList.add('conflict-role');
         rowB[2].classList.add('conflict-role');
       }
+      if (sameTime && a.guest === b.host) {
+        rowA[2].classList.add('conflict-role');
+        rowB[0].classList.add('conflict-role');
+      }
 
-      if (timeDiff > 0 && timeDiff < 60 && (a.host === b.host || a.guest === b.guest)) {
+      if (timeDiff > 0 && timeDiff < gap && (a.host === b.host || a.guest === b.guest)) {
+        if (a.host === b.host) {
+          rowA[3].classList.add('conflict-time');
+          rowB[3].classList.add('conflict-time');
+        }
+        if (a.guest === b.guest) {
+          rowA[3].classList.add('conflict-time');
+          rowB[3].classList.add('conflict-time');
+        }
+      }
+
+      if (timeDiff > 0 && timeDiff < gap && (a.host === b.guest || a.guest === b.host)) {
         rowA[3].classList.add('conflict-time');
         rowB[3].classList.add('conflict-time');
       }
@@ -509,7 +569,7 @@ function autoSaveRow() {
     return Array.from(row.children).map(cell => {
       const doc = cell.querySelector('.doc-box');
       if (doc && doc.getAttribute('data-file')) {
-        return doc.getAttribute('data-file');
+        return { type: "file", name: doc.getAttribute('data-name'), data: doc.getAttribute('data-file') };
       }
       return cell.textContent.trim();
     });
@@ -538,61 +598,6 @@ function openFile(dataUrl) {
   a.href = dataUrl;
   a.download = '';
   a.click();
-}
-
-function scheduleNotifications() {
-  if (!notificationsEnabled) return;
-
-  const rows = document.querySelectorAll('#excelTable tbody tr');
-  const now = new Date();
-  const leadMinutes = parseInt(document.getElementById('notifLeadTime').value || "15");
-  const duration = parseInt(document.getElementById('notifDuration').value || "10");
-  const soundDuration = parseInt(document.getElementById('notifSoundDuration').value || "10");
-  const playSound = document.getElementById('notifSound').checked;
-  const notifyAtStart = document.getElementById('notifAtStart').checked;
-
-  rows.forEach((row, index) => {
-    if (!row.classList.contains('confirmed')) return;
-
-    const cells = row.querySelectorAll('td');
-    const time = cells[3]?.textContent.trim();
-    const date = normalizeDate(cells[4]?.textContent.trim());
-    if (!time || !date) return;
-
-    const target = new Date(`${date}T${time}`);
-    const diff = (target - now) / 60000;
-
-    const key = `${date}-${time}`;
-    if ((diff <= leadMinutes && diff > 0) || (notifyAtStart && Math.abs(diff) < 1)) {
-      if (!document.querySelector(`[data-key="${key}"]`)) {
-        showNotification(`⏰ تنبيه لموعد الساعة ${time} بتاريخ ${date}`, duration, playSound, soundDuration, key);
-      }
-    }
-  });
-}
-
-function showNotification(msg, duration, playSound, soundDuration, key) {
-  const list = document.getElementById('notifList');
-  const item = document.createElement('li');
-  item.textContent = msg;
-  item.setAttribute('data-key', key);
-  list.prepend(item);
-
-  const count = document.getElementById('notifCount');
-  count.textContent = parseInt(count.textContent) + 1;
-
-  if (playSound) {
-    const audio = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
-    audio.loop = true;
-    audio.play();
-    setTimeout(() => audio.pause(), soundDuration * 1000);
-  }
-
-  const toast = document.createElement('div');
-  toast.textContent = msg;
-  toast.style = "position:fixed;bottom:10px;right:10px;background:#ffc;padding:10px;border:1px solid #ccc;";
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), duration * 1000);
 }
 </script>
 <script>
@@ -780,6 +785,7 @@ function prepareShare() {
 }
 
 window.onload = () => {
+  loadUserSettings();
   loadTable();
   filterRows('all');
   setInterval(autoSaveRow, 1000);
