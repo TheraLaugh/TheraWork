@@ -169,6 +169,8 @@
     <button onclick="exportExcel()">💿 تصدير</button>
     <button onclick="resetTable()">🗑️ إزالة الكل</button>
     <button onclick="prepareShare()">🔗 مشاركة</button>
+<button id="syncButton">🔄 مزامنة</button>
+<input type="file" id="syncInput" accept=".json" style="display:none">
   </div>
 
   <table id="excelTable">
@@ -639,21 +641,39 @@ function exportAsJSON(filename = "TheraWork") {
   const rows = Array.from(table.querySelectorAll('tbody tr'));
   const data = rows.map(row => {
     const rowData = [];
-    row.querySelectorAll('td').forEach((cell, i) => {
+    const cells = row.querySelectorAll('td');
+
+    for (let i = 0; i < 7; i++) {
+      const cell = cells[i];
       const doc = cell.querySelector('.doc-box');
       if (doc && doc.getAttribute('data-file')) {
-        rowData.push({ type: "file", name: doc.getAttribute('data-name'), data: doc.getAttribute('data-file') });
+        rowData.push({
+          type: "file",
+          name: doc.getAttribute('data-name'),
+          data: doc.getAttribute('data-file')
+        });
       } else {
         rowData.push(cell.textContent.trim());
       }
-    });
+    }
 
+    // استخراج الحالة من الصف
     let status = "none";
-    if (row.classList.contains("confirmed")) status = "✅️";
-    else if (row.classList.contains("cancelled")) status = "❌️";
-    else if (acceptedMap.has(row)) status = "💡";
-    rowData.push({ status });
+    let acceptedBy = "";
 
+    if (row.classList.contains("confirmed")) {
+      status = "✅️";
+    } else if (row.classList.contains("cancelled")) {
+      status = "❌️";
+    } else if (row.classList.contains("highlighted-row")) {
+      status = "💡";
+      const span = cells[7].querySelector('.accepted-party');
+      if (span) {
+        acceptedBy = span.textContent.trim();
+      }
+    }
+
+    rowData.push({ status, acceptedBy });
     return rowData;
   });
 
@@ -664,6 +684,7 @@ function exportAsJSON(filename = "TheraWork") {
   a.href = url;
   a.download = filename + ".json";
   a.click();
+  URL.revokeObjectURL(url);
 }
 
 
@@ -842,6 +863,79 @@ function prepareShare() {
     th.appendChild(btn);
     header.appendChild(th);
   }
+}
+</script>
+<script>
+document.getElementById('syncButton').addEventListener('click', () => {
+  document.getElementById('syncInput').click();
+});
+
+document.getElementById('syncInput').addEventListener('change', function () {
+  const file = this.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const newRows = JSON.parse(reader.result);
+    mergeRowsIntoTable(newRows);
+  };
+  reader.readAsText(file);
+});
+
+function mergeRowsIntoTable(newRows) {
+  const tbody = document.querySelector('#excelTable tbody');
+
+  newRows.forEach(rowData => {
+    const row = document.createElement('tr');
+
+    for (let i = 0; i < 7; i++) {
+      const td = document.createElement('td');
+      td.contentEditable = true;
+
+      // الوثائق
+      if (i === 5 && typeof rowData[i] === "object" && rowData[i]?.type === "file") {
+        const doc = rowData[i];
+        const div = document.createElement('div');
+        div.className = 'doc-box';
+        const btn = document.createElement('button');
+        btn.className = 'doc-name-button';
+        btn.textContent = doc.name;
+        btn.onclick = () => window.open(doc.data, '_blank');
+        div.appendChild(btn);
+        div.setAttribute('data-file', doc.data);
+        div.setAttribute('data-name', doc.name);
+        td.appendChild(div);
+      } else {
+        td.textContent = typeof rowData[i] === "string" ? rowData[i] : '';
+      }
+
+      row.appendChild(td);
+    }
+
+    // الحالة من العنصر رقم 7
+    const statusCell = document.createElement('td');
+    const statusObj = rowData[7];
+    const status = statusObj?.status || '';
+    const acceptedBy = statusObj?.acceptedBy || '';
+
+    if (status === "✅️") {
+      row.classList.add("confirmed");
+      statusCell.textContent = "✅";
+    } else if (status === "❌️") {
+      row.classList.add("cancelled");
+      statusCell.textContent = "❌";
+    } else if (status === "💡") {
+      row.classList.add("highlighted-row");
+      statusCell.innerHTML = `💡<br><span class="accepted-party">${acceptedBy}</span>`;
+    } else {
+      statusCell.textContent = "غير محددة";
+    }
+
+    row.appendChild(statusCell);
+    tbody.appendChild(row);
+  });
+
+  checkConflicts(); // كشف التعارض بعد الدمج
 }
 </script>
 <script>
